@@ -13,6 +13,7 @@
 
 
 # from pymongo import MongoClient
+import sys
 from os import getenv
 from flask import Flask, request, render_template, redirect, url_for, abort
 from string import digits, ascii_letters
@@ -71,27 +72,35 @@ def decode(string, alphabet=BASE62):
 
 @app.route('/<path:path>', methods=['GET'])
 def path_redirect(path):
-    redirect_path = redirects.find_one({"path_from": path})
-
-    if not redirect_path:
-        return '404'
+    if path in redirects.keys():
+        return redirect(redirects[path], 302)
     else:
-        return redirect_path=redirect_path['shorturl1']
+        return abort(404)
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        original_url = request.get_json()  # must figure this out
-        if urlparse(original_url).scheme == '':
-            original_url = 'http://' + original_url
-
+        payload = request.get_json()  # must figure this out (small url key, big url value)
+        print(payload)
+        if 'url' in payload.keys():
+            # TODO:: validate url + add https:// if it isnt there
+            longurl = payload['url']
+            byte_array = bytearray(longurl, "utf8")
+            n = int.from_bytes(byte_array, sys.byteorder)
+            shorturl = encode(n, BASE62)
+            if shorturl not in redirects.keys():
+                redirects[shorturl] = longurl
+            return {'newurl': shorturl, 'url': longurl}
+            # add something to prevent base62 collision if it occurs
+    if request.method == 'GET':
+        return redirects
     return "FUCKING"
 
 
 if __name__ == "__main__":
     app.run(debug=True)
 
-temp = encode(123, BASE62)
+temp = encode("thing", BASE62)
 print(temp)
 print(decode(temp, BASE62))
