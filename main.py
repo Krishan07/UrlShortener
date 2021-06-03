@@ -12,7 +12,8 @@
 # https://stackoverflow.com/questions/1119722/base-62-conversion
 
 
-# from pymongo import MongoClient
+from pymongo import MongoClient
+import json
 import sys
 from os import getenv
 from flask import Flask, request, render_template, redirect, url_for, abort
@@ -23,11 +24,9 @@ from urllib.parse import urlparse
 BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 app = Flask(__name__)
 max_slink_len = 7
-redirects = {
-    "shorturl1": "youtube.com",
-    "shorturl2": "twitter.com",
-    "shorturl3": "reddit.com",
-}
+client = MongoClient('localhost', 27017)
+db = client['database']
+collection = db['collection']
 
 
 def encode(num, alphabet):
@@ -78,6 +77,10 @@ def path_redirect(path):
         return abort(404)
 
 
+def url_present(shorturl: str) -> bool:
+    return bool(collection.find_one({"new_url": shorturl}))
+
+
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
@@ -89,12 +92,12 @@ def home():
             byte_array = bytearray(longurl, "utf8")
             n = int.from_bytes(byte_array, sys.byteorder)
             shorturl = encode(n, BASE62)
-            if shorturl not in redirects.keys():
-                redirects[shorturl] = longurl
-            return {'newurl': shorturl, 'url': longurl}
+            if url_present(shorturl):
+                collection.insert_one({'newu_rl': shorturl, 'url': longurl})
+            return {'new_url': shorturl, 'url': longurl}
             # add something to prevent base62 collision if it occurs
     if request.method == 'GET':
-        return redirects
+        return json.dumps(list(collection.find()))
     return "FUCKING"
 
 
