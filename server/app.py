@@ -13,14 +13,12 @@
 
 
 from pymongo import MongoClient
-import json
 import sys
-from os import getenv
-from flask import Flask, request, render_template, redirect, url_for, abort
-from string import digits, ascii_letters
-from secrets import choice
-from urllib.parse import urlparse
+from flask import Flask, request, redirect, abort
+import requests
+import hashids
 
+hasher = hashids.Hashids(min_length=5, salt="randomsaltstringfordev")
 BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 app = Flask(__name__)
 max_slink_len = 7
@@ -29,44 +27,8 @@ db = client['database']
 collection = db['collection']
 
 
-def encode(num, alphabet):
-    """Encode a positive number into Base X and return the string.
-
-    Arguments:
-    - `num`: The number to encode
-    - `alphabet`: The alphabet to use for encoding
-    """
-    if num == 0:
-        return alphabet[0]
-    arr = []
-    arr_append = arr.append  # Extract bound-method for faster access.
-    _divmod = divmod  # Access to locals is faster.
-    base = len(alphabet)
-    while num:
-        num, rem = _divmod(num, base)
-        arr_append(alphabet[rem])
-    arr.reverse()
-    return ''.join(arr)
-
-
-def decode(string, alphabet=BASE62):
-    """Decode a Base X encoded string into the number
-
-    Arguments:
-    - `string`: The encoded string
-    - `alphabet`: The alphabet to use for decoding
-    """
-    base = len(alphabet)
-    strlen = len(string)
-    num = 0
-
-    idx = 0
-    for char in string:
-        power = (strlen - (idx + 1))
-        num += alphabet.index(char) * (base ** power)
-        idx += 1
-
-    return num
+def encode(url):
+    return hasher.encode(url)
 
 
 @app.route('/<path:path>', methods=['GET'])
@@ -85,26 +47,29 @@ def url_present(shorturl: str, longurl: str) -> bool:
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        payload = request.get_json()  # must figure this out (small url key, big url value)
+        payload = request.get_json()
         print(payload)
         if 'url' in payload.keys():
-            # TODO:: validate url + add https:// if it isnt there
+
             longurl = payload['url']
+            state = requests.get(longurl)
+            if state.status_code != 200:
+                print(state.status_code)
+                return {"error": "malformed url"}, 400
+            if not longurl.startswith("https://") and not longurl.startswith("http://"):
+                longurl = "https://" + longurl
             byte_array = bytearray(longurl, "utf8")
             n = int.from_bytes(byte_array, sys.byteorder)
-            shorturl = encode(n, BASE62)
+            shorturl = encode(n)
+            print(f"urlis {shorturl}")
             if not url_present(shorturl, longurl):
                 collection.insert_one({'new_url': shorturl, 'url': longurl})
             return {'new_url': shorturl, 'url': longurl}
-            # add something to prevent base62 collision if it occurs
+        return {"error": "no url"}, 400
     if request.method == 'GET':
         return {'key': [{'new_url': i['new_url'], 'url': i['url']} for i in collection.find()]}
-    return "FUCKING"
+    return {"error": "only accepts GET/POST"}, 400
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-temp = encode("thing", BASE62)
-print(temp)
-print(decode(temp, BASE62))
