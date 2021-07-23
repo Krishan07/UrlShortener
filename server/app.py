@@ -15,12 +15,16 @@
 from pymongo import MongoClient
 import sys
 from flask import Flask, request, redirect, abort
+from flask_cors import CORS
 import requests
 import hashids
+
 
 hasher = hashids.Hashids(min_length=5, salt="randomsaltstringfordev")
 BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 app = Flask(__name__)
+CORS(app)
+app.config['CORS_HEADERS']= 'Content-Type'
 max_slink_len = 7
 client = MongoClient('localhost', 27017)
 db = client['database']
@@ -52,12 +56,13 @@ def home():
         if 'url' in payload.keys():
 
             longurl = payload['url']
+            if not longurl.startswith("https://") and not longurl.startswith("http://"):
+                longurl = "https://" + longurl
             state = requests.get(longurl)
             if state.status_code != 200:
                 print(state.status_code)
                 return {"error": "malformed url"}, 400
-            if not longurl.startswith("https://") and not longurl.startswith("http://"):
-                longurl = "https://" + longurl
+            
             byte_array = bytearray(longurl, "utf8")
             n = int.from_bytes(byte_array, sys.byteorder)
             shorturl = encode(n)
